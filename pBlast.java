@@ -1,5 +1,7 @@
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.util.Arrays;
+import java.util.Random;
 import java.util.Scanner;
 
 class pBlast {
@@ -34,28 +36,28 @@ class pBlast {
 		}
 		
 		
-		// Set querry
-		String querry = generate(dna, prob, 1000, 100) + "TTTTTTTA" + generate(dna, prob, 1110, 500) + "AATTC" + generate(dna,prob, 1615, 400);
+		// Set query
+		String query = randomize(generate(dna, prob, 1000, 5000), 0.05); 
 		
 		
 		String[][] preData = preProcess(dna, prob);
 		
-		String[][] seed = findSeed(querry, preData);
+		String[][] seed = findSeed(query, preData);
 		
-		String[] hsp = ungap(seed, querry, dna, prob);
+		String[] hsp = ungap(seed, query, dna, prob);
 		
 		// find the best hsp
 		String[] index = hsp[0].split("[;]+");
 		double[] score = convScore(hsp[1].split("[ ]+"));
 		
 		
-		double threshold = 0.1 * querry.length();
+		double threshold = 0.1 * query.length();
 		String[] bestAlign = new String[3];
 		bestAlign[2] = "0";
 		for(int i = 0; i< score.length;i++) {
 			if (score[i] > threshold) {
 				String[] ind = index[i].split("[ ]+");
-				String[] nAlign = gapped(ind[0],ind[1],ind[2],ind[3], querry, dna, prob, score[i]);
+				String[] nAlign = gapped(ind[0],ind[1],ind[2],ind[3], query, dna, prob, score[i]);
 				if (Double.parseDouble(bestAlign[2]) < Double.parseDouble(nAlign[2])) {
 					bestAlign= nAlign;
 					//[0] = nAlign[0];
@@ -66,7 +68,7 @@ class pBlast {
 		}
 		
 		
-		System.out.println(querry);
+		System.out.println(query);
 		System.out.println(bestAlign[0]);
 		System.out.println(bestAlign[1]);
 		System.out.println(bestAlign[2]);
@@ -75,8 +77,65 @@ class pBlast {
 		
 	}
 	
+	public static String randomize(String q, double percent) {
+		String query = "";
+		int len = q.length();
+		Random index = new Random();
+		String nucleotide = "ACGT";
+		int[] indel = new int[(int) Math.floor(len*percent)];
+		for(int i = 0; i < indel.length; i++) {
+			indel[i] = index.nextInt(len);
+		}
+		
+		Arrays.sort(indel);
+		int prev = 0;
+		for(int i = 0; i< indel.length; i++) {
+			double r = Math.random();
+			if (r <= 1/3) { // deletion
+				if(prev >= indel[i]) {
+					prev = indel[i] + 1;
+					continue;
+				}
+				else{
+					query = query + q.substring(prev, indel[i]);
+					prev = indel[i] + 1;
+				}
+				
+			}
+			else if (r <= 2/3) { //insertion
+				if(prev >= indel[i]) {
+					prev = indel[i];
+					continue;
+				}
+				else {
+					query  = query + q.substring(prev, indel[i]);
+					prev = indel[i];
+					query = query + nucleotide.charAt(index.nextInt(4));
+				}
+				
+			}
+			else {
+				if(prev >= indel[i]) {
+					prev = indel[i]+1;
+					continue;
+				}
+				else {
+					query = query + q.substring(prev, indel[i]);
+					prev = indel[i] + 1;
+					query = query + nucleotide.charAt(index.nextInt(4));
+				}
+			}
+		}
+		if(prev < len) {
+			query = query + q.substring(prev, len);
+		}
+		return query;
+	}
+	
+	
+	
 	public static String generate(String dna, double[] prob, int pos, int len) {
-		String querry = "";
+		String query = "";
 		for (int i = 0; i<len; i++) {
 			double r = Math.random();
 			double p = prob[pos+i];
@@ -95,23 +154,23 @@ class pBlast {
 			}
 			
 			if(r <= p) {
-				querry = querry + dna.charAt(pos+i);
+				query = query + dna.charAt(pos+i);
 			}
 			else if(r <= (p+(1-p)/3)) {
-				querry = querry + c.charAt(0);
+				query = query + c.charAt(0);
 			}
 			else if(r <= (p + 2*(1-p)/3)) {
-				querry = querry + c.charAt(1);
+				query = query + c.charAt(1);
 			}
 			else {
-				querry = querry + c.charAt(2);
+				query = query + c.charAt(2);
 			}
 		}
 		
-		return querry;
+		return query;
 	}
 	
-	public static String[] gapped(String qS, String qE, String dS, String dE, String querry, String dna, double[] prob, double score) {
+	public static String[] gapped(String qS, String qE, String dS, String dE, String query, String dna, double[] prob, double score) {
 		String[] align = new String[5];
 		
 		int qStart = Integer.parseInt(qS);
@@ -149,7 +208,7 @@ class pBlast {
 					lPointer[i][j] = 1;
 				}
 				else {
-					double m = lMatch[i-1][j-1] + match(querry.charAt(qStart-i), dna.charAt(dStart-j), prob[dStart-j]);
+					double m = lMatch[i-1][j-1] + match(query.charAt(qStart-i), dna.charAt(dStart-j), prob[dStart-j]);
 					double iDel = lMatch[i-1][j] -1;
 					double jDel = lMatch[i][j-1] -1;
 					
@@ -183,13 +242,13 @@ class pBlast {
 		// Trace back
 		while (x>0 || y>0) {
 			if(lPointer[x][y] == 0) {
-					lq = lq + querry.charAt(qStart-x);
+					lq = lq + query.charAt(qStart-x);
 					ld = ld + dna.charAt(dStart-y);
 					x--;
 					y--;
 				}
 			else if(lPointer[x][y] == 1) {
-					lq = lq + querry.charAt(qStart-x);
+					lq = lq + query.charAt(qStart-x);
 					ld = ld + "-";
 					x--;
 			}
@@ -208,20 +267,20 @@ class pBlast {
 		best[1] = 0;
 		best[2] = 0;
 		
-		if(dna.length()-dEnd > 4*(querry.length()-qEnd)) {
-			dRange = 4*(querry.length()-qEnd);
+		if(dna.length()-dEnd > 4*(query.length()-qEnd)) {
+			dRange = 4*(query.length()-qEnd);
 		}
 		else {
 			dRange = dna.length()-dEnd;
 		}
 		
-		double[][] rMatch = new double[querry.length()-qEnd][dRange];
-		int [][] rPointer = new int[querry.length()-qEnd][dRange];
+		double[][] rMatch = new double[query.length()-qEnd][dRange];
+		int [][] rPointer = new int[query.length()-qEnd][dRange];
 		String rq = "";
 		String rd = "";
 		
 		
-		for(int i=0;i<querry.length()-qEnd;i++) {
+		for(int i=0;i<query.length()-qEnd;i++) {
 			for(int j = 0; j<dRange;j++) {
 				//indel penalty = -1
 				if(i==0 && j==0) {
@@ -236,7 +295,7 @@ class pBlast {
 					rPointer[i][j] = 1;
 				}
 				else {
-					double m = rMatch[i-1][j-1] + match(querry.charAt(qEnd+i), dna.charAt(dEnd+j), prob[dEnd+j]);
+					double m = rMatch[i-1][j-1] + match(query.charAt(qEnd+i), dna.charAt(dEnd+j), prob[dEnd+j]);
 					double iDel = rMatch[i-1][j] -1;
 					double jDel = rMatch[i][j-1] -1;
 					
@@ -270,13 +329,13 @@ class pBlast {
 		
 		while(x > 0 || y > 0) {
 			if(rPointer[x][y] == 0) {
-				rq = querry.charAt(qEnd+x) +rq;
+				rq = query.charAt(qEnd+x) +rq;
 				rd = dna.charAt(dEnd+y) +rd;
 				x--;
 				y--;
 			}
 			else if(rPointer[x][y] == 1) {
-				rq = querry.charAt(qStart+y) +rq;
+				rq = query.charAt(qStart+y) +rq;
 				rd = "-" +rd;
 				x--;
 			}
@@ -289,7 +348,7 @@ class pBlast {
 		score = score + best[0];
 		
 		
-		align[0] = lq + querry.substring(qStart, qEnd+1) + rq;
+		align[0] = lq + query.substring(qStart, qEnd+1) + rq;
 		align[1] = ld + dna.substring(dStart, dEnd+1) + rd;
 		align[2] = "" + score;
 	
@@ -307,7 +366,7 @@ class pBlast {
 	}
 	
 	
-	public static String[] ungap(String[][] seed, String querry, String dna, double[] prob) {
+	public static String[] ungap(String[][] seed, String query, String dna, double[] prob) {
 		//String[][] hsp = new String[seed.length][3];
 		String[] hsp = {"",""};
 		
@@ -338,7 +397,7 @@ class pBlast {
 				maxL = 0;
 				// Extend to left
 				while((qStart-left)>=0 && (dStart-left)>=0) {
-					score = score + match(querry.charAt(qStart-left), dna.charAt(dStart-left), prob[dStart-left]);
+					score = score + match(query.charAt(qStart-left), dna.charAt(dStart-left), prob[dStart-left]);
 					if(score >= max) {
 						max = score;
 						maxL = left;
@@ -356,8 +415,8 @@ class pBlast {
 				right = 1;
 				maxR = 0;
 				// Extend to right
-				while((qEnd+right) < querry.length() && (dEnd+right) < dna.length()) {
-					score = score + match(querry.charAt(qEnd+right), dna.charAt(dEnd+right), prob[dEnd+right]);
+				while((qEnd+right) < query.length() && (dEnd+right) < dna.length()) {
+					score = score + match(query.charAt(qEnd+right), dna.charAt(dEnd+right), prob[dEnd+right]);
 					
 					if(score >= max) {
 						max = score;
@@ -399,30 +458,30 @@ class pBlast {
 	public static String[][] findSeed(String q, String[][] preData) {
 		String[][] seed = new String[q.length()-10][2];
 		
-		int[] querry = convert(q);
+		int[] query = convert(q);
 		
 		int qPos = 0;
 		for(int i=0; i<11; i++) {
-			qPos = qPos*4 + querry[i];
+			qPos = qPos*4 + query[i];
 		}
 		
 		seed[0][0] = preData[qPos][0];
 		seed[0][1] = preData[qPos][1];
 		
-		int fir = querry[0];
+		int fir = query[0];
 		
-		for(int i=11; i<querry.length;i++) {
+		for(int i=11; i<query.length;i++) {
 			if(fir != 0) {
-				qPos = (qPos - fir*(1048576))*4 + querry[i];
+				qPos = (qPos - fir*(1048576))*4 + query[i];
 				seed[i-10][0] = preData[qPos][0];
 				seed[i-10][1] = preData[qPos][1];
 			}
 			else {
-				qPos = qPos*4 + querry[i];
+				qPos = qPos*4 + query[i];
 				seed[i-10][0] = preData[qPos][0];
 				seed[i-10][1] = preData[qPos][1];
 			}
-			fir = querry[i-10];
+			fir = query[i-10];
 		}
 		
 		
